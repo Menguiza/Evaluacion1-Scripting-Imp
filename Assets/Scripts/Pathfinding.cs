@@ -1,231 +1,97 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 
-public class Pathfinding : MonoBehaviour 
+public class Pathfinding : MonoBehaviour
 {
 
-	public GameObject selectedPlayer;
+	public Transform seeker, target;
+	Grid grid;
 
-	public TypeTile[] typeTiles;
-
-	int[,] _tiles;
-	Node[,] _graph;
-
-
-	int mapSizeX = 20;
-	int mapSizeY = 20;
-
-	void Start() 
+	void Awake()
 	{
-		selectedPlayer.GetComponent<Player>().tileX = (int)selectedPlayer.transform.position.x;
-		selectedPlayer.GetComponent<Player>().tileY = (int)selectedPlayer.transform.position.y;
-		selectedPlayer.GetComponent<Player>().map = this;
-
-		GenerateMapData();
-		GeneratePathfindingGraph();
-		GenerateMapVisual();
+		grid = GetComponent<Grid>();
 	}
 
-	void GenerateMapData() 
+	void Update()
 	{
-		_tiles = new int[mapSizeX,mapSizeY];
-		
-		int x,y;
-		
-		for(x=0; x < mapSizeX; x++) 
-		{
-			for(y=0; y < mapSizeX; y++) 
-			{
-				_tiles[x,y] = 0;
-			}
-		}
-
-		for(x=3; x <= 5; x++) 
-		{
-			for(y=0; y < 4; y++) 
-			{
-				_tiles[x,y] = 1;
-			}
-		}
-		
-		_tiles[4, 4] = 2;
-		_tiles[5, 4] = 2;
-		_tiles[6, 4] = 2;
-		_tiles[7, 4] = 2;
-		_tiles[8, 4] = 2;
-
-		_tiles[4, 5] = 2;
-		_tiles[4, 6] = 2;
-		_tiles[8, 5] = 2;
-		_tiles[8, 6] = 2;
-
+		FindPath(seeker.position, target.position);
 	}
 
-	public float CostToEnterTile(int sourceX, int sourceY, int targetX, int targetY) 
+	void FindPath(Vector3 startPos, Vector3 targetPos)
 	{
-		TypeTile tt = typeTiles[_tiles[targetX,targetY]];
+		Node startNode = grid.NodeFromWorldPoint(startPos);
+		Node targetNode = grid.NodeFromWorldPoint(targetPos);
 
-		if(UnitCanEnterTile(targetX, targetY) == false)
-			return Mathf.Infinity;
+		List<Node> openSet = new List<Node>();
+		HashSet<Node> closedSet = new HashSet<Node>();
+		openSet.Add(startNode);
 
-		float cost = tt.movementCost;
-
-		if( sourceX!=targetX && sourceY!=targetY) 
+		while (openSet.Count > 0)
 		{
-			cost += 0.001f;
-		}
-
-		return cost;
-
-	}
-
-	void GeneratePathfindingGraph() 
-	{
-		_graph = new Node[mapSizeX,mapSizeY];
-
-		for(int x=0; x < mapSizeX; x++) 
-		{
-			for(int y=0; y < mapSizeX; y++) 
+			Node node = openSet[0];
+			for (int i = 1; i < openSet.Count; i++)
 			{
-				_graph[x,y] = new Node();
-				_graph[x,y].x = x;
-				_graph[x,y].y = y;
-			}
-		}
-
-		for(int x=0; x < mapSizeX; x++) 
-		{
-			for(int y=0; y < mapSizeX; y++) 
-			{
-				if(x > 0)
-					_graph[x,y].neighbours.Add( _graph[x-1, y] );
-				if(x < mapSizeX-1)
-					_graph[x,y].neighbours.Add( _graph[x+1, y] );
-				if(y > 0)
-					_graph[x,y].neighbours.Add( _graph[x, y-1] );
-				if(y < mapSizeY-1)
-					_graph[x,y].neighbours.Add( _graph[x, y+1] );
-
-			}
-		}
-	}
-
-	void GenerateMapVisual() 
-	{
-		for(int x=0; x < mapSizeX; x++) 
-		{
-			for(int y=0; y < mapSizeX; y++) 
-			{
-				TypeTile tt = typeTiles[ _tiles[x,y] ];
-				GameObject go = (GameObject)Instantiate( tt.tileVisualPrefab, new Vector3(x, y, 0), Quaternion.identity );
-
-				ClickTile ct = go.GetComponent<ClickTile>();
-				ct.tileX = x;
-				ct.tileY = y;
-				ct.map = this;
-			}
-		}
-	}
-
-	public Vector3 TileCoordToWorldCoord(int x, int y) 
-	{
-		return new Vector3(x, y, 0);
-	}
-
-	public bool UnitCanEnterTile(int x, int y) 
-	{
-		return typeTiles[ _tiles[x,y] ].isWalkable;
-	}
-
-	public void GeneratePathTo(int x, int y) 
-	{
-		selectedPlayer.GetComponent<Player>().currentPath = null;
-
-		if( UnitCanEnterTile(x,y) == false ) 
-		{
-			return;
-		}
-
-		Dictionary<Node, float> dist = new Dictionary<Node, float>();
-		Dictionary<Node, Node> prev = new Dictionary<Node, Node>();
-
-		List<Node> unvisited = new List<Node>();
-		
-		Node source = _graph
-		[
-			selectedPlayer.GetComponent<Player>().tileX, 
-			selectedPlayer.GetComponent<Player>().tileY
-		];
-		
-		Node target = _graph
-		[
-			x, 
-			y
-		];
-		
-		dist[source] = 0;
-		prev[source] = null;
-
-		foreach(Node v in _graph) 
-		{
-			if(v != source) 
-			{
-				dist[v] = Mathf.Infinity;
-				prev[v] = null;
-			}
-
-			unvisited.Add(v);
-		}
-
-		while(unvisited.Count > 0) 
-		{
-			Node u = null;
-
-			foreach(Node possibleU in unvisited) 
-			{
-				if(u == null || dist[possibleU] < dist[u]) 
+				if (openSet[i].fCost < node.fCost || openSet[i].fCost == node.fCost)
 				{
-					u = possibleU;
+					if (openSet[i].hCost < node.hCost)
+						node = openSet[i];
 				}
 			}
 
-			if(u == target) 
+			openSet.Remove(node);
+			closedSet.Add(node);
+
+			if (node == targetNode)
 			{
-				break;
+				RetracePath(startNode, targetNode);
+				return;
 			}
 
-			unvisited.Remove(u);
-
-			foreach(Node v in u.neighbours) 
+			foreach (Node neighbour in grid.GetNeighbours(node))
 			{
-				float alt = dist[u] + CostToEnterTile(u.x, u.y, v.x, v.y);
-				if( alt < dist[v] ) 
+				if (!neighbour.walkable || closedSet.Contains(neighbour))
 				{
-					dist[v] = alt;
-					prev[v] = u;
+					continue;
+				}
+
+				int newCostToNeighbour = node.gCost + GetDistance(node, neighbour);
+				if (newCostToNeighbour < neighbour.gCost || !openSet.Contains(neighbour))
+				{
+					neighbour.gCost = newCostToNeighbour;
+					neighbour.hCost = GetDistance(neighbour, targetNode);
+					neighbour.parent = node;
+
+					if (!openSet.Contains(neighbour))
+						openSet.Add(neighbour);
 				}
 			}
 		}
-
-		if(prev[target] == null) 
-		{
-			return;
-		}
-
-		List<Node> currentPath = new List<Node>();
-
-		Node curr = target;
-
-		while(curr != null) 
-		{
-			currentPath.Add(curr);
-			curr = prev[curr];
-		}
-
-		currentPath.Reverse();
-
-		selectedPlayer.GetComponent<Player>().currentPath = currentPath;
 	}
 
+	void RetracePath(Node startNode, Node endNode)
+	{
+		List<Node> path = new List<Node>();
+		Node currentNode = endNode;
+
+		while (currentNode != startNode)
+		{
+			path.Add(currentNode);
+			currentNode = currentNode.parent;
+		}
+		path.Reverse();
+
+		grid.path = path;
+
+	}
+
+	int GetDistance(Node nodeA, Node nodeB)
+	{
+		int dstX = Mathf.Abs(nodeA.gridX - nodeB.gridX);
+		int dstY = Mathf.Abs(nodeA.gridY - nodeB.gridY);
+
+		if (dstX > dstY)
+			return 14 * dstY + 10 * (dstX - dstY);
+		return 14 * dstX + 10 * (dstY - dstX);
+	}
 }
